@@ -1,0 +1,12 @@
+1.pwd显示当前目录的绝对路径
+2.cd进入 cd-返回上级目录 cd~返回根目录
+3.ls显示当前目录下的文件夹
+4.ls -lh显示当前目录下所有文件的大小
+5.mkdir创建新的文件夹
+6.touch创建新的空文件
+7.echo内容打印到屏幕
+8.批量创建文件夹mkdir folder{1..10}
+9.连续产生具有层级关系的文件夹mkdir -p folder1/folder2
+10.rm test.txt删除文件；rm -r删除目录；rm -rf强制删除无需注意确认
+11.cp -r test/ newtest 将test/目录下的所有文件复制到newtest目录下
+12.cat查看文件；cat > test.txt向test.txt文件里写入，以ctrl+c结束
