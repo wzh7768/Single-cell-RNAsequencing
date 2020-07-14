@@ -1,0 +1,5 @@
+1.该软件用于基因序列比对
+2.首先找到索引，在example文件夹下用ls -lh index/查看索引
+3.构建索引bowtie2-build reference/lambda_virus.fa tmp
+4.bowtie2 --help查看软件用法
+5.输入命令bowtie2 -x tmp -1reads/reads_1.fq -2 reads/reads_2.fq -S tmp.sam进行比对，最后生成 -S tmp.sam文件显示比对结果,用less命令查看
