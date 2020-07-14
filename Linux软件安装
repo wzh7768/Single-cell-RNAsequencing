@@ -1,1 +1,9 @@
 
+1.wget +网址下载软件后，解压使用
+2.调用软件用全路径调用，出现帮助文档即为调用成功
+3.bz2文件用tar xvfj 解压
+4.调用软件方法一赋值为变量：bowtie2=/home/wzh/biosoft/bowtie2/bowtie2-2.2.9/bowtie2;$bowtie2
+5.方法二：alias bowtie2='/home/wzh/biosoft/bowtie2/bowtie2-2.2.9/bowtie2';bowtie2
+6.方法三：环境变量，查看环境变量cat ~/.bashrc;export PATH="$PATH:/home/wzh/biosoft/bowtie2/bowtie2-2.2.9/"(暂时)
+7.追加永久环境变量，vim ~/.bashrc,在最后一行写入export PATH="$PATH:/home/wzh/biosoft/bowtie2/bowtie2-2.2.9"，然后Esc+:wq退出，然后source ~/.bashrc,即永久加入环境变量
+8.文件内置数据 ~/biosoft/bowtie2/bowtie2-2.2.9/example,然后用ls -lh *或者tree -h查看数据内容即大小
