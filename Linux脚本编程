@@ -1,0 +1,7 @@
+1.vi tmp.sh 创建脚本
+2.i 键入脚本
+3.ESC+：wq退出脚本编辑
+4.bash tmp.sh 运行脚本
+5.常用通配符*(匹配任意字符)和[](中括号内的内容任意匹配一个)
+6.while循环写法:while read id;do echo id;done
+7.for循环写法:for i in SRR103952*;do echo $i;done.    for i in {20..23};do echo SRR10395${i}.fastq.gz;done
