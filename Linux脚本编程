@@ -33,7 +33,7 @@ if [ $rate -ge 80 ]
 25.多条件分支if语句：
 #!/bin/bash
 ntpdate asia.pool.ntp.org &>/dev/null
-date=$(date +y%m%d%)
+date=$(date +%y%m%d)
 size=$(du -sh /etc)
 if [ -d /tmp/dbback ]
         then
