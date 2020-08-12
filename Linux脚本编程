@@ -24,3 +24,9 @@ sed '3s/74/99/g' aaa.sh在第3行进行字符串替换；sed -e 's/Liming//g;s/G
 23.条件判断：判断1 -a 判断2，逻辑与；判断1 -o 判断2逻辑或；！判断，逻辑非，使原始的判断式取反 
 例子：aa=11 [ -n "$aa" -a "$aa" -gt 23 ] && echo "yes" || echo "no"
 24.单分支if条件语句：
+#!/bin/bash
+rate=$(df -h | grep nvme0n1p6 | awk '{print $5}' | cut -d "%" -f 1)
+if [ $rate -ge 80 ]
+        then
+                echo "warning"
+        fi
