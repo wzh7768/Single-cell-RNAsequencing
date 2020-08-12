@@ -1,7 +1,26 @@
-1.vi tmp.sh 创建脚本
+1.vim tmp.sh 创建脚本
 2.i 键入脚本
 3.ESC+：wq退出脚本编辑
 4.bash tmp.sh 运行脚本
 5.常用通配符*(匹配任意字符)和[](中括号内的内容任意匹配一个)
-6.while循环写法:while read id;do echo id;done
-7.for循环写法:for i in SRR103952*;do echo $i;done.    for i in {20..23};do echo SRR10395${i}.fastq.gz;done
+6.cut用法：cut -f 1,3 + 文件名提取第1,3列；cut -d ":" + 文件名指定分隔符
+7.grep -v 取反
+8.awk命令基本格式:awk'条件1{动作1}条件2{动作2}'+文件名 例： df -h | grep nvme0n1p6|awk '{print $5}'|cut -d "%" -f 1提取根文件内存信息
+9.awk命令指定分隔符：awk 'BEGIN{FS=":"}{print $1 "\t" $3}' /etc/passwd
+10.awk命令条件判断：awk '$6>=87{print$2}'
+11.sed命令可以对命令结果和文件进行修改
+12.sed命令选项：-n只把经过sed命令处理的行输出到屏幕；-e允许对输入数据应用多条sed命令编辑；-i用sed的修改结果直接修改读取数据的文件
+13.sed命令动作：a\，在当前行后追加一行；c\，行替换，用c后面的字符串替换原数据行；i\，插入，在当前行前插入一行；d，删除指定行；p，打印指定行；s，字符串替换，行范围s/旧字串/新字串/g
+14.sed命令例子:sed -n '2p' student.txt打印第二行；df -h | sed -n '2p'，提取第二行；sed '2a hello' aaa.sh在第二行后追加hello；sed '2i hello\ world' aaa.sh在第二行前插入两行；
+sed '3s/74/99/g' aaa.sh在第3行进行字符串替换；sed -e 's/Liming//g;s/Gao//g' aaa.sh,进行多条sed命令编辑
+15.sort命令用于排序，-f忽略大小写；-n以数值型排序；-r反向排序；-t指定分隔符；-k n,m按照指定的字段范围排序；
+16.sort例子：sort -n -t ":" -k 3,3 /etc/passwd
+17.wc[选项]文件名 -l统计行数；-w统计单词数；-m统计字符数
+18.test -e /root/install.log;[-e/root/install.log]两种格式判断文件是否存在
+19.test常用选项 -d判断文件是否存在，并且是否为目录文件；-e判断文件是否存在；-f判断文件是否存在并且是否为普通文件
+20.test文件权限判断 -r判断是否有读权限；-w是否有写权限；-x是否有执行权限
+21.[ 22 -eq 23 ]数值判断式 -eq相等；-ne不等；-gt大于；-lt小于；-ge大于等于；-le小于等于
+22.字符串判断：-z是否为空；-n是否非空；字串1==字串2;判断字串是否相等；字串1！=字串2字串是否不等
+23.条件判断：判断1 -a 判断2，逻辑与；判断1 -o 判断2逻辑或；！判断，逻辑非，使原始的判断式取反 
+例子：aa=11 [ -n "$aa" -a "$aa" -gt 23 ] && echo "yes" || echo "no"
+24.单分支if条件语句：
