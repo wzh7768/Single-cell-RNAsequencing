@@ -30,3 +30,24 @@ if [ $rate -ge 80 ]
         then
                 echo "warning"
         fi
+25.多条件分支if语句：
+#!/bin/bash
+ntpdate asia.pool.ntp.org &>/dev/null
+date=$(date +y%m%d%)
+size=$(du -sh /etc)
+if [ -d /tmp/dbback ]
+        then
+                echo "Date : $date!" > /tmp/dbback/dbinfo.txt
+                echo "Data size: $size" >> /tmp/dbback/dbinfo.txt
+                cd /tmp/dbback
+                tar -zcf etc_$date.tar.gz /etc dbinfo.txt &>/dev/null
+                rm -rf /tmp/dbback/dbinfo.txt
+        else    
+                mkdir /tmp/dbback
+                echo "Date : $date!" > /tmp/dbback/dbinfo.txt
+                echo Data size : $size >> /tmp/dbback/dbinfo.txt
+                cd /tmp/dbback
+                tar-zcf etc_$date.tar.gz /etc dbinfo.txt &>/dev/null
+                rm -rf /tmp/dbback/dbinfo.txt
+fi  
+
