@@ -10,3 +10,4 @@
 10.rm test.txt删除文件；rm -r删除目录；rm -rf强制删除无需注意确认
 11.cp -r test/ newtest 将test/目录下的所有文件复制到newtest目录下
 12.cat查看文件；cat > test.txt向test.txt文件里写入，以ctrl+c结束
+13.df -h显示内存信息
