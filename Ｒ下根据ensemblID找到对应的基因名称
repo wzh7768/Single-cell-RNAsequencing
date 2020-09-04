@@ -1,0 +1,16 @@
+根据Ｒ包org.Hs.eg.db找到下面ensembl基因ＩＤ对应的基因名称
+options(stringsAsFactors = F)
+a=read.table('R语言代码/test1.txt')
+library(org.Hs.eg.db)
+#gene ID to symbol
+g2s=toTable(org.Hs.egSYMBOL)
+#gene ID to ensembl
+g2e=toTable(org.Hs.egENSEMBL)
+#map
+#delete "." in gene ensembl ID
+library(stringr)
+a$ensembl_id=unlist(lapply(a$V1,function(x){
+  strsplit(as.character(x),'[.]')[[1]][1]
+}))
+tmp=merge(a,g2e,by='ensembl_id')
+tmp=merge(tmp,g2s,by='gene_id')
