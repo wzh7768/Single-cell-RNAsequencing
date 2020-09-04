@@ -1,0 +1,9 @@
+rm(list = ls())
+options(stringsAsFactors = F)
+a=read.table('R语言代码/plot(2).txt',sep='\t',fill=T,header = T)
+colnames(a)=c('id','subtype','expression','mut')
+dat=a
+library(ggstatsplot)
+ggbetweenstats(data=dat,x=subtype,y=expression)
+library(ggplot2)
+ggsave('BRCA.png')
