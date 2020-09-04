@@ -1,0 +1,11 @@
+rm(list = ls())
+options(stringsAsFactors = F)
+a=read.table('R语言代码/test2.txt')
+colnames(a)='probe_id'
+library(hgu133a.db)
+ids=toTable(hgu133aSYMBOL)
+head(ids)
+#method1
+tmp=merge(a,ids,by='probe_id')
+#method2
+tmp2=ids[match(a$probe_id,ids$probe_id),]
