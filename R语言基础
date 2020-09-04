@@ -1,0 +1,227 @@
+#Grep the dataframe by index
+a=read.table ('./SraRunTable.txt',stringsAsFactors = F,header=T,sep='\t')
+index1=grep('RNA-Seq',a$Assay_Type)
+index2=grepl('RNA-Seq',a$Assay_Type)
+b=a[index1,]
+b=a[index2,]
+b=a[c(1,2,3),]
+
+#read the raw data
+a=read.table('./SraRunTable.txt',stringsAsFactors = F,header=T,sep='\t')
+#export the data
+write.csv(b,'...',row.names = F)
+write.table(b,'...',sep=',')
+#save as R data
+save(b,file = 'b_input.Rdata')
+load(file='b_input.Rdata')
+#delete the first row
+rownames(b)=b[,-1]
+#log of data
+b=log2(b)
+#draw the heatmap
+pheatmap::pheatmap(b[1:10,])
+
+#base of operator
+sort(a$MBases,decreasing=T)[1]
+max(a$MBases)
+min(a$MBases)
+fivenum(a$MBase)
+b=a[a$MBases<5000,]
+boxplot(a$MBases~a$Assay_Type)
+
+#base of statistic
+mean(as.numeric(b[1,]))
+rowMeans(b)
+
+for (i in 1:nrow(b)){
+  mean(as.numeric(b[i,]))
+}
+
+apply(b,1,function(x){
+  mean(x)
+})
+
+rowMax=function(x){
+  apply(x,1,max)
+}
+rowMax(b)
+
+#creat function
+wzh <- for(i in 1:nrow(b)){
+  x=as.numeric(b[i,])
+  y=x[1]*x[2]-x[3]
+  print(y)
+}
+wzh(b)
+
+#sd
+sort(apply(b,1,sd),decreasing=T)[1:50]
+cg=names(sort(apply(b,1,sd),decreasing=T)[1:50])
+pheatmap::pheatmap(b[cg,])
+
+#heatmap
+library(pheatmap)
+a1=rnorm(100)
+dim(a1)=c(5,20)
+a2=rnorm(100)+2
+dim(a2)=c(5,20)
+pheatmap(a1,cluster_rows=F,cluster_cols=F)
+pheatmap(a2,cluster_rows=F,cluster_cols=F)
+b=cbind(a1,a2)
+b=as.data.frame(b)
+names(b)=c(paste('a1',1:20,sep='_'),paste('a2',1:20,sep='_'))
+annotation_col=data.frame(CellType=factor(rep(c('CT1','CT2'),20)),Time=1:20)
+#annotation rownames=the colnames of original matrix
+rownames(annotation_col) = colnames(b)
+pheatmap(b,annotation_col = annotation_col)
+
+#switch ID
+options(stringsAsFactors = F)
+a=read.table('ensembl.txt')
+library('stringr')
+a$ensembl_id=str_split(a$V1,'[.]',simplify=T)[,1]#simplify=T let export as matrix
+library('org.Hs.eg.db')#gene id annotation 
+g2s=toTable(org.Hs.egSYMBOL)
+g2e=toTable(org.Hs.egENSEMBL)
+b=merge(a,g2e,by='ensembl_id',all.x=T)
+d=merge(b,g2s,by='gene_id',all.x=T)
+table(d$ensemble_id)[table(d$ensembl_id)>1]#find the duplicate gene_id
+d=d[order(d$V1),]
+d=d[!duplicated(d$V1),]#delete the duplicate gene_id
+d=d[match(a$V1,d$V1),]
+write.csv(d,'geneID2symbol.csv')
+
+#survival plot
+rm(list=ls())
+options(stringsAsFactors = F)
+a=read.table('.csv',header=T,sep=',',fill=T)
+colnames(a)
+dat=a
+library(ggstatsplot)
+ggbetweenstats(data=dat,x=Group,y=Expression)
+library(ggplot2)
+library(survival)
+library(survminer)
+table(dat$Status)
+dat$Status=ifelse(dat$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=dat)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+ggsave=('survival.png')
+ggsurvplot(sfit,palette=c('#E7B800','#2E9FDF'),
+           risk.table=T,pval=T,
+           conf.int=T,xlab='Time in months',
+           ggtheme=theme_light(),
+           ncensor.plot=T)
+ggsave('surv.png')
+
+#clinical data
+a=read.table('/home/wzh/Downloads/plot(1).txt',header=T,sep='\t',fill=T)
+colnames(a)=c('id','expression','gene','mut')
+dat=a
+library(ggstatsplot)
+ggbetweenstats(data=dat,x=expression,y=gene)
+library(ggplot2)
+ggsave('.png')
+
+#correlation of sample data
+library(airway)
+data(airway)
+#get expression array
+exprSet=assay(airway)
+colnames(exprSet)
+dim(exprSet)
+group_list=colData(airway)[,3]
+tmp=data.frame(g=group_list)
+rownames(tmp)=colnames(exprSet)
+pheatmap::pheatmap(cor(exprSet),annotation_col = tmp)
+#judge wethere the gene been include into the final calculation 
+exprSet=exprSet[apply(exprSet,1,function(x) sum(x>1) >5),]
+exprSet=log(edgeR::cpm(exprSet)+1)
+#get top 500
+exprSet=exprSet[names(sort(apply(exprSet,1,mad),decreasing = T)[1:500]),]
+M=cor(log2(exprSet+1))
+tmp=data.frame(g=group_list)
+rownames(tmp)=colnames(M)
+pheatmap::pheatmap(M,annotation_col=tmp)
+
+#The downstream analysis of chip expression array
+library(CLL)
+data(sCLLex)
+exprSet=exprs(sCLLex)
+samples=sampleNames(sCLLex)
+pdata=pData(sCLLex)
+group_list=as.character(pdata[,2])
+dim(exprSet)
+exprSet[1:5,1:5]
+#DEG by limma
+suppressMessages(library(limma))
+design <- model.matrix(~0+factor(group_list))
+colnames(design)=levels(factor(group_list))
+rownames(design)=colnames(exprSet)
+design
+#compare progress and stable
+contrast.matrix <- makeContrasts(paste0(unique(group_list),collapse='-'),levels=design)
+contrast.matrix
+#step1
+fit <- lmFit(exprSet,design)
+#step2
+fit2 <- contrasts.fit(fit,contrast.matrix)
+fit2 <- eBayes(fit2)
+#step3
+tempOutput = topTable(fit2,coef=1,n=Inf)
+nrDEG = na.omit(tempOutput)
+head(nrDEG)
+
+#RNA-seq analysis
+options(stringsAsFactors = F)
+library(airway)
+data(airway)
+exprSet=assay(airway)
+colnames(exprSet)
+group_list=colData(airway)[,3]
+exprSet=exprSet[apply(exprSet,1,function(x) sum(x>1) >5),]
+table(group_list)
+#DESeq2
+if(T){
+  library(DESeq2)
+  (colData <- data.frame(row.names=colnames(exprSet),
+                         group_list=group_list))
+  dds <- DESeqDataSetFromMatrix(countData = exprSet,
+                                colData = colData,
+                                design= ~ group_list)
+  tmp_f='airway_DESeq2-dds.Rdata'
+  if(!file.exists(tmp_f)){
+    dds <- DESeq(dds)
+    save(dds,file = tmp_f)
+  }
+  load(file = tmp_f)
+  res <- results(dds,
+                 contrast=c('group_list','trt','untrt'))
+  resOrdered <- res[order(res$padj),]
+  head(resOrdered)
+  DEG=as.data.frame(resOrdered)
+  DESeq2_DEG=na.omit(DEG)
+  
+  nrDEG=DESeq2_DEG[,c(2,6)]
+  colnames(nrDEG)=c('log2FoldChange','pvalue')
+}
+colnames(nrDEG)=c('logFC','P.Value')
+attach(nrDEG)
+plot(logFC,-log10(P.Value))
+library(ggpubr)
+df=nrDEG
+df$v=-log10(P.Value)
+ggscatter(df,x='logFC',y='v',size=0.5)
+df$g=ifelse(df$P.value>0.01,'stable',
+            ifelse(df$logFC>1.5,'up',
+                   ifelse(df$logFC<1.5,'down','stable')))
+table(df$g)
+df$name=rownames(df)
+ggscatter(df,x='logFC',y='v',size=0.5,color='g')
+ggscatter(df,x='logFC',y='v',color='g',size=0.5,
+          #label='symbol',reprl=T,
+          #label.select=rownames(df)[df$g != 'stable'],
+          #label.select=c('PROM1','AGR3','AGR2'),
+          palette=c('#00AFBB','#E7B800','#FC4E07'))
