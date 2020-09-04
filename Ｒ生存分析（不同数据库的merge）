@@ -1,0 +1,81 @@
+rm(list = ls())
+options(stringsAsFactors = F)
+a=read.table('R语言代码/BRCA_7157_50_50.csv',sep=',',fill=T,header = T)
+dat=a
+library(ggplot2)
+library(survival)
+library(survminer)
+table(dat$Status)
+dat$Status=ifelse(dat$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=dat)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+ggsave('survival_TP53_in_BRCA_tcga.png')
+ggsurvplot(sfit,palette=c('#E7B800','#2E9FDF'),
+           risk.table=T,pval=T,
+           conf.int=T,xlab="Time in months",
+           ggtheme=theme_light(),
+           ncensor.plot=T)
+ggsave(survival_TP53_in_BRCA_tcga_2.png)
+head(a)
+b=read.table('R语言代码/plot(2).txt',sep='\t',fill=T,header = T)
+colnames(b)=c('Patient','subtype','expression','mut','X')
+head(b)
+b$Patient=substring(b$Patient,1,12)
+tmp=merge(a,b,by='Patient')
+table(tmp$subtype)
+type='BRCA_Basal'
+x=tmp[tmp$subtype==type,]
+library(ggplot2)
+library(survival)
+library(survminer)
+x$Status=ifelse(x$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=x)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+
+type='BRCA_Her2'
+x=tmp[tmp$subtype==type,]
+library(ggplot2)
+library(survival)
+library(survminer)
+x$Status=ifelse(x$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=x)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+
+type='BRCA_LumA'
+x=tmp[tmp$subtype==type,]
+library(ggplot2)
+library(survival)
+library(survminer)
+x$Status=ifelse(x$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=x)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+
+type='BRCA_LumB'
+x=tmp[tmp$subtype==type,]
+library(ggplot2)
+library(survival)
+library(survminer)
+x$Status=ifelse(x$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=x)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
+
+type='BRCA_Normal'
+x=tmp[tmp$subtype==type,]
+library(ggplot2)
+library(survival)
+library(survminer)
+x$Status=ifelse(x$Status=='Dead',1,0)
+sfit <- survfit(Surv(Days,Status)~Group,data=x)
+sfit
+summary(sfit)
+ggsurvplot(sfit,conf.int=F,pval=T)
