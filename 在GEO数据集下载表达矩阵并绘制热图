@@ -21,3 +21,30 @@ a=gset[[1]]
 dat=exprs(a)
 dim(dat)
 #得到的表达矩阵原始状态式探针ID，需要转换为symbolID
+library(hgu133a.db)
+ids=toTable(hgu133aSYMBOL)
+head(ids)
+dat=dat[ids$probe_id,]
+dat[1:4,1:4]
+ids$median=apply(dat,1,median)
+ids=ids[order(ids$symbol,ids$median,decreasing = T),]
+ids=ids[!duplicated(ids$symbol),]
+dat=dat[ids$probe_id,]
+rownames(dat)=ids$symbol
+dat[1:4,1:4]
+dim(dat)
+#绘制指定基因的热图
+ng='ACTR3B ANLN BAG1 BCL2 BIRC5 BLVRA CCNB1 CCNE1 CDC20 CDC6 CDCA1 CDH3 CENPF CEP55 CXXC5 EGFR ERBB2 ESR1 EXO1 FGFR4 FOXA1 FOXC1 GPR160 GRB7 KIF2C KNTC2 KRT14 KRT17 KRT5 MAPT MDM2 MELK MIA MKI67 MLPH MMP11 MYBL2 MYC NAT1 ORC6L PGR PHGDH PTTG1 RRM2 SFRP1 SLC39A6 TMEM45B TYMS UBE2C UBE2T
+'
+ng=strsplit(ng,' ')[[1]]
+#判断指定基因是否存在于数据集中
+ng %in% rownames(dat)
+table(ng %in% rownames(dat))
+ng=ng[ng %in% rownames(dat)]
+dat[ng,]
+dat=log2(dat)
+pheatmap::pheatmap(dat,scale='row')
+
+
+
+
