@@ -36,6 +36,43 @@ if(F){
   probe2gene=Table(gpl)[,c(1,15)]
   save(probe2gene,file='probe2gene.Rdata')
 }
-#平台有专用Ｒ包
+#平台有专用Ｒ包（http://www.bio-info-trainee.com/1399.html）
 BiocManager::install('hugene10sttranscriptcluster.db')
 library(hugene10sttranscriptcluster.db)
+
+#ID转换
+ids=toTable(hugene10sttranscriptclusterSYMBOL)
+length(unique(ids$symbol))
+#查看哪些基因有重复
+tail(sort(table(ids$symbol)))
+table(sort(table(ids$symbol)))
+#将探针对应到基因
+table(rownames(exprSet) %in% ids$probe_id)
+dim(exprSet)
+#过滤掉没有探针的基因
+exprSet=exprSet[rownames(exprSet) %in% ids$probe_id,]
+dim(exprSet)
+ids=ids[match(rownames(exprSet),ids$probe_id),]
+#合并
+wzh <- function(exprSet,ids){
+  tmp=by(exprSet,
+         ids$symbol,
+         function(x) rownames(x)[which.max(rowMeans(x))])
+  probes = as.character(tmp)
+  print(dim(exprSet))
+  exprSet=exprSet[rownames(exprSet) %in% probes,]
+  print(dim(exprSet))
+  rownames(exprSet)=ids[match(rownames(exprSet),ids$probe_id),2]
+  return(exprSet)
+}
+new_exprSet <- wzh(exprSet,ids)
+#绘图
+library(reshape2)
+exprSet_L=melt(new_exprSet)
+colnames(exprSet_L)=c('probe','sample','value')
+library(stringr)
+group_list=str_split(pdata$title,'_',simplify = T)[,1:2]
+group_list=apply(group_list,1,function(x) paste(x,collapse = '_'))
+group_list[10:11]=c('healthy','healthy')
+exprSet_L$group=rep(group_list,each=nrow(new_exprSet))
+head(exprSet_L)
