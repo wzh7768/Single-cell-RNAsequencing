@@ -1,0 +1,41 @@
+#下载数据
+f='GSE24673_eSet.Rdata'
+library(GEOquery)
+if(!file.exists(f)){
+  gset <- getGEO('GSE24673',destdir=".",
+                  AnnotGPL=F,    
+                  getGPL=F)　　　 
+  save(gset,file=f)    
+}
+
+
+h='GSE42872_eSet.Rdata'
+library(GEOquery)
+if(!file.exists(h)){
+  gset1 <- getGEO('GSE42872',destdir=".",
+                 AnnotGPL=F,    
+                 getGPL=F)　　　 
+  save(gset1,file=h)    
+}
+
+#获得表达矩阵
+ob=gset[[1]]
+exprSet=exprs(ob)
+samples=sampleNames(ob)
+pdata=pData(ob)
+group_list=as.character(pdata[,2])
+dim(exprSet)
+exprSet[1:5,1:5]
+#获得基因注释
+#平台没有专用Ｒ包
+if(F){
+  library(GEOquery)
+  gpl <- getGEO('GPL6244',destdir = ".")
+  colnames(Table(gpl))
+  head(Table(gpl)[,c(1,15)])
+  probe2gene=Table(gpl)[,c(1,15)]
+  save(probe2gene,file='probe2gene.Rdata')
+}
+#平台有专用Ｒ包
+BiocManager::install('hugene10sttranscriptcluster.db')
+library(hugene10sttranscriptcluster.db)
