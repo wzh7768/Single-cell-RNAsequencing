@@ -76,3 +76,15 @@ group_list=apply(group_list,1,function(x) paste(x,collapse = '_'))
 group_list[10:11]=c('healthy','healthy')
 exprSet_L$group=rep(group_list,each=nrow(new_exprSet))
 head(exprSet_L)
+###ggplot2
+p=ggplot(exprSet_L,aes(x=sample,y=value,fill=group))+geom_boxplot()
+print(p)
+p=ggplot(exprSet_L,aes(x=sample,y=value,fill=group))+geom_violin()
+print(p)
+#PCA
+library(ggfortify)
+df=as.data.frame(t(exprSet))
+df$group=group_list
+png('pca.png',res=120)
+autoplot(prcomp(df[,1:(ncol(df)-1)]),data=df,colour='group')+theme_bw()
+dev.off()
