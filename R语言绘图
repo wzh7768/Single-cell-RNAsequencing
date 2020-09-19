@@ -1,0 +1,53 @@
+#箱型图
+library(ggpubr)
+p <- ggboxplot(df,x='stage',y='gene',
+               color='stage',
+               shape='stage')
+my_comparisons <- list( c("i", "ii"), c("ii", "iii"), c("iii", "iv") )
+p + stat_compare_means(comparisons = my_comparisons)+ # Add pairwise comparisons p-value
+  stat_compare_means(label.y = 50)                   # Add global p-value
+
+#相关性图
+ggscatter(dat, x = "gene1", y = "gene2",
+          color = "black", shape = 21, size = 3, # Points color, shape and size
+          add = "reg.line",  # Add regressin line
+          add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+          conf.int = TRUE, # Add confidence interval
+          cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+          cor.coeff.args = list(method = "pearson", label.x = 15, label.sep = "\n")
+)
+#相关性图２
+sp <- ggscatter(dat, x = "gene1", y = "gene2",
+                add = "reg.line",  # Add regressin line
+                add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+                conf.int = TRUE # Add confidence interval
+)
+#添加相关系数
+sp + stat_cor(method = "pearson", label.x = 15, label.y = 20)
+#对不同分期样本分别做相关性分析
+sp <- ggscatter(dat, x = "gene1", y = "gene2",
+                color = "stage", palette = "jco",
+                add = "reg.line", conf.int = TRUE)
+sp + stat_cor(aes(color = cyl), label.x = 15)
+
+#火山图（用于基因表达的差异分析）
+plot(nrDEG$logFC,-log10(nrDEG$P.Value))
+library(ggpubr)
+df=nrDEG
+df$v=-log10(P.Value)
+ggscatter(df,x='logFC',y='v',size = 0.5)
+df$g=ifelse(df$P.Value>0.01,'stable',
+            ifelse( df$logFC >1.5,'up',
+                    ifelse( df$log <1.5,'down','stable'))
+)
+table(df$g)
+df$name=rownames(df)
+ggscatter(df, x='logFC',y='v',size=0.5,color='g')
+ggscatter(df, x='logFC',y='v',color='g',size=0.5,
+          label='symbol',repel=T,
+          label.select = c('CACHD1','SERTAD4','CNNM1'),
+          palette = c('#00AFBB','#E7B800','FC4E07'))
+
+#通路图（pathway enrichment）
+
+
