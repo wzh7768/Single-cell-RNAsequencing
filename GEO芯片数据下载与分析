@@ -88,3 +88,47 @@ df$group=group_list
 png('pca.png',res=120)
 autoplot(prcomp(df[,1:(ncol(df)-1)]),data=df,colour='group')+theme_bw()
 dev.off()
+
+#差异分析
+#t.test
+dat = exprSet
+group_list=as.factor(group_list)
+group1=which(group_list == levels(group_list)[1])
+group2=which(group_list == levels(group_list)[2])
+dat1=dat[,group1]
+dat2=dat[,group2]
+dat=cbind(dat1,dat2)
+pvals=apply(exprSet,1,function(x){
+  t.test(as.numeric(x)~group_list)$p.value
+})
+p.adj=p.adjust(pvals,method="BH")
+avg_1=rowMeans(dat1)
+avg_2=rowMeans(dat2)
+log2FC=avg_2-avg_1
+DEG_t.test = cbind(avg_1,avg_2,log2FC,pvals,p.adj)
+DEG_t.test=DEG_t.test[order(DEG_t.test[,4]),]
+DEG_t.test=as.data.frame(DEG_t.test)
+head(DEG_t.test)
+
+#DEG by limma
+suppressMessages(library(limma))
+design <- model.matrix(~0+factor(group_list))
+colnames(design)=levels(factor(group_list))
+rownames(design)=colnames(exprSet)
+design
+#compare progress and stable
+contrast.matrix <- makeContrasts(paste0(unique(group_list),collapse='-'),levels=design)
+contrast.matrix
+#step1
+fit <- lmFit(exprSet,design)
+#step2
+fit2 <- contrasts.fit(fit,contrast.matrix)
+fit2 <- eBayes(fit2)
+#step3
+tempOutput = topTable(fit2,coef=1,n=Inf)
+nrDEG = na.omit(tempOutput)
+head(nrDEG)
+
+#数据存储及提取
+save(exprSet,group_list,file='for_DEG.Rdata')
+load(file='for_DEG.Rdata')
