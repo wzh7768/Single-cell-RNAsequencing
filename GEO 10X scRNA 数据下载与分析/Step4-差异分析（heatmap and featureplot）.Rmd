@@ -1,0 +1,141 @@
+---
+title: "差异分析（heatmap and featureplot）"
+output: html_document
+---
+
+```{r}
+#差异分析
+#按照时间点进行拆分绘图
+TimePoints = PBMC@meta.data$TimePoints
+table(TimePoints)
+PBMC_ARD614 = SubsetData(PBMC,TimePoints =='PBMC_ARD614')
+TSNEPlot(PBMC_ARD614, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_EarlyD27    = SubsetData(PBMC,TimePoints =='PBMC_EarlyD27')
+TSNEPlot(PBMC_EarlyD27, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_Pre  = SubsetData(PBMC,TimePoints =='PBMC_Pre')
+TSNEPlot(PBMC_Pre, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_RespD376 = SubsetData(PBMC,TimePoints =='PBMC_RespD376')
+TSNEPlot(PBMC_RespD376, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+#找到进行差异分析的细胞群
+PBMC_RespD376@active.ident
+PBMC_RespD376_for_DEG = SubsetData(PBMC_RespD376,
+                                   PBMC_RespD376@active.ident %in% c(4,10))
+count_matrix=PBMC_RespD376_for_DEG@assay$RNA@data
+cluster=PBMC_RespD376_for_DEG@active.ident
+save(count_matrix,cluster,
+     file = 'PBMC_RespD376_for_DEG.Rdata')
+#使用monocle做差异分析
+rm(list = ls())
+options(warn=-1)
+suppressMessages(library(Seurat))
+load(file = '/home/wzh/Desktop/scRNA_10X-master/PBMC_RespD376_for_DEG.Rdata')
+count_matrix[1:4,1:4]
+dim(count_matrix)
+table(cluster)
+#构建 monocle 对象
+library(monocle) 
+expr_matrix <- as.matrix(count_matrix)
+sample_sheet <- data.frame(cells=names(count_matrix),  
+                           cellType=cluster)
+rownames(sample_sheet)<- names(count_matrix)
+gene_annotation <- as.data.frame(rownames(count_matrix))
+rownames(gene_annotation)<- rownames(count_matrix)
+colnames(gene_annotation)<- "genes"
+pd <- new("AnnotatedDataFrame", data = sample_sheet)
+fd <- new("AnnotatedDataFrame", data = gene_annotation)
+#构建稀疏矩阵
+HSMM <- newCellDataSet(
+  as(expr_matrix, "sparseMatrix"),
+  phenoData = pd,
+  featureData = fd,
+  lowerDetectionLimit=0.5,
+  expressionFamily=negbinomial.size()
+)
+#Normalization
+HSMM <- detectGenes(HSMM, min_expr = 1)
+HSMM <- HSMM[fData(HSMM)$num_cells_expressed > 1, ]
+HSMM
+HSMM <- estimateSizeFactors(HSMM)
+HSMM <- estimateDispersions(HSMM)
+HSMM
+cds=HSMM
+# 单细胞转录组最重要的就是把细胞分群啦，这里可供选择的算法非常多，我们首先演示PCA结果。
+# 并不是所有的基因都有作用，所以先进行挑选，合适的基因用来进行聚类。
+disp_table <- dispersionTable(cds)
+unsup_clustering_genes <- subset(disp_table, mean_expression >= 0.1)
+cds <- setOrderingFilter(cds, unsup_clustering_genes$gene_id)
+plot_ordering_genes(cds)
+# plot_pc_variance_explained(cds, return_all = F) # norm_method='log'
+# 其中 num_dim 参数选择基于上面的PCA图
+cds <- reduceDimension(cds, max_components = 2, num_dim = 6,
+                       reduction_method = 'tSNE', verbose = T)
+cds <- clusterCells(cds, num_clusters = 5) 
+plot_cell_clusters(cds, 1, 2, color = "cellType")
+table(pData(cds)$Cluster,cluster)
+plot_cell_clusters(cds, 1, 2 )
+#找差异基因
+diff_test_res <- differentialGeneTest(cds,
+                                      fullModelFormulaStr = "~cellType")
+# Select genes that are significant at an FDR < 10%
+sig_genes <- subset(diff_test_res, qval < 0.1)
+dim(sig_genes)
+sig_genes$gene_short_name = rownames(sig_genes)
+head(sig_genes[,c("gene_short_name", "pval", "qval")] )
+#根据实际情况挑选感兴趣的基因
+htmapGenes=c(
+  'GAPDH','CD52','TRAC','IL32','ACTB','ACTG1','COTL1',
+  'GZMA','GZMB','GZMH','GNLY'
+)
+htmapGenes %in% rownames(sig_genes)
+#热图绘图
+library(pheatmap)
+dat=count_matrix[htmapGenes,]
+pheatmap(dat)
+n=t(scale(t(dat)))
+n[n>2]=2 #限定上限，使表达量大于2的等于2
+n[n< -2]= -2 #限定下限，使表达量小于-2的等于-2
+n[1:4,1:4]
+pheatmap(n,show_colnames =F,show_rownames = F)
+ac=data.frame(group=cluster)
+rownames(ac)=colnames(n)
+pheatmap(n,annotation_col = ac,
+         show_colnames =F,show_rownames = T)
+n[n< -1]= -1 #限定下限，使表达量小于-2的等于-2
+n[1:4,1:4] 
+pheatmap(n,annotation_col = ac,
+         show_colnames =F,show_rownames = T)
+#FeaturePlot绘图
+rm(list = ls())
+options(warn=-1)
+suppressMessages(library(Seurat))
+# 首先加载前面使用Seurat包进行细胞分群的结果
+load('')
+TSNEPlot(tumor, group.by = 'cellTypes', colors.use = c('#EF8A62', '#67A9CF'))
+count_matrix=tumor@assay$RNA@data
+count_matrix[1:4,1:4]
+cluster=tumor@meta.data$cellTypes
+table(cluster)
+allGenes = row.names(tumor@assay$RNA@raw.data)
+allGenes[grep('HLA',allGenes)]
+FeaturePlot(object = tumor, 
+            features ='HLA-A', 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+table(count_matrix['HLA-A',]>0, cluster)
+#可以看到 HLA-A 在免疫治疗前后并没有显著差异
+FeaturePlot(object = tumor, 
+            features ='HLA-B', 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+table(count_matrix['HLA-B',]>0, cluster)
+#可以看到 HLA-B在免疫治疗前后差异很大。
+```
+

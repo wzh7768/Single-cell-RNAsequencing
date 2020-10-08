@@ -1,0 +1,278 @@
+---
+title: "10X数据下载"
+output: html_document
+---
+#基于Linux环境运行
+#根据数据链接的特点生成每一个数据下载链接的ftp，如
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21653/suppl/GSE21653_RAW.tar
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE19nnn/GSE19615/suppl/GSE19615_RAW.tar
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE6nnn/GSE6532/suppl/GSE6532_RAW.tar
+```{r}
+#linux数据下载
+#axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE117nnn/GSE117988/suppl/GSE117988_raw.expMatrix_PBMC.csv.gz
+#axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE117nnn/GSE117988/suppl/GSE117988_raw.expMatrix_PBMC.csv.gz
+rm(list = ls())
+options(warn=-1) 
+suppressMessages(library(Seurat))
+raw_dataPBMC <- read.csv('/home/wzh/Desktop/GSE117988_raw.expMatrix_PBMC.csv.gz', header = TRUE, row.names = 1)
+#按照列，对每一个细胞进行内部归一化，主要是统一文库大小
+dataPBMC <- log2(1 + sweep(raw_dataPBMC, 2, median(colSums(raw_dataPBMC))/colSums(raw_dataPBMC), '*'))
+#对合并矩阵的分组信息进行拆分
+timePoints <- sapply(colnames(dataPBMC), function(x) unlist(strsplit(x, "\\."))[2]) 
+timePoints <-ifelse(timePoints == '1', 'PBMC_Pre', 
+                    ifelse(timePoints == '2', 'PBMC_EarlyD27',
+                           ifelse(timePoints == '3', 'PBMC_RespD376', 'PBMC_ARD614')))
+#表达矩阵的质量控制
+#简单看看表达矩阵的性质，主要是基因数量，细胞数量;以及每个细胞表达基因的数量，和每个基因在多少个细胞里面表达
+#(fivenum():返回五个数据：最小值、下四分位数、中位数、上四分位数、最大值)
+fivenum(apply(dataPBMC,1,function(x) sum(x>0) ))
+#boxplot(apply(dataPBMC,1,function(x) sum(x>0) ))
+fivenum(apply(dataPBMC,2,function(x) sum(x>0) ))
+#hist(apply(dataPBMC,2,function(x) sum(x>0) ))
+
+#创建Seurat的对象
+PBMC <- CreateSeuratObject(dataPBMC, 
+                           min.cells = 1, min.features = 0, 
+                           project = '10x_PBMC')
+# Add meta.data (nUMI and timePoints)
+PBMC <- AddMetaData(object = PBMC, 
+                    metadata = apply(raw_dataPBMC, 2, sum),
+                    col.name = 'nUMI_raw')
+PBMC <- AddMetaData(object = PBMC, metadata = timePoints, col.name = 'TimePoints')
+#nFeature_RNA nUMI_raw绘图
+sce=PBMC
+features=c("nFeature_RNA", "nUMI_raw")
+VlnPlot(object = sce, 
+        features = features, 
+        group.by = 'TimePoints', ncol = 2)
+#相关性
+FeatureScatter(sce,feature1 = "nUMI_raw",feature2 = "nFeature_RNA")
+#高表达量基因
+tail(sort(Matrix::rowSums(GetAssayData(sce,assay = "RNA"))))
+#标准聚类可视化
+#Cluster PBMC
+PBMC <- ScaleData(object = PBMC, vars.to.regress = c('nUMI_raw'), model.use = 'linear', use.umi = FALSE)
+#Find VariableFeatures
+PBMC <- FindVariableFeatures(object = PBMC, mean.function = ExpMean, dispersion.function = LogVMR, mean.cutoff = c(0.0125,3), dispersion.cutoff = c(0.5,Inf))
+#PCA降维
+PBMC <- RunPCA(object = PBMC, pc.genes = VariableFeatures(PBMC))
+#t-SNE聚类
+PBMC <- FindNeighbors(PBMC, reduction = "pca", dims = 1:10,
+                      k.param = 35)
+PBMC <- FindClusters(object = PBMC, 
+                     resolution = 1, verbose=F) 
+
+PBMC <- RunTSNE(object = PBMC, dims.use = 1:10)
+
+DimPlot(PBMC)
+#储存Ｒ数据
+save(PBMC,file = 'patient1.PBMC.output.Rdata')
+
+rm(list = ls())
+options(warn=-1) 
+suppressMessages(library(Seurat))
+load('/home/wzh/Desktop/scRNA_10X-master/seurat-v3/patient1.PBMC.output.Rdata')
+colP<-c('green4', 
+        'pink', 
+        '#FF7F00', 
+        'orchid', 
+        '#99c9fb', 
+        'dodgerblue2', 
+        'grey30', 
+        'yellow', 
+        'grey60', 
+        'grey', 
+        'red', 
+        '#FB9A99', 
+        'black',
+        'blue'
+)
+
+TSNEPlot(PBMC,
+         cols=colP,
+         label = T,label.size=9,pt.size=1.5)
+ggsave(filename = 'TSNEPlot_patient1_PBMC.pdf')
+#四个时期的TSNE图
+TSNEPlot(PBMC,group.by="TimePoints",pt.size=1.5)
+## 然后根据文章，可视化那些marker基因
+allGenes = row.names(PBMC@assays$RNA@data)
+markerGenes <- c(
+  "CD3D",
+  "CD3E",
+  "TRAC",
+  "IL7R",
+  "GZMA",
+  "FCGR3A",
+  "CD14",
+  "MS4A1",
+  "FCER1A" 
+)
+markerGenes %in% allGenes
+# Visualize canonical marker genes as violin plots.
+pdf('patient1_pBMC_marker_VlnPlot.pdf', width=10, height=15)
+VlnPlot(object = PBMC, features = markerGenes) 
+dev.off()
+# Visualize canonical marker genes on the sctransform embedding.
+pdf('patient1_pBMC_marker_FeaturePlot.pdf', width=10, height=15)
+FeaturePlot(object = PBMC, 
+            features =markerGenes, 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+dev.off()
+##根据marker gene对细胞进行命名
+head(as.numeric(as.character(PBMC@active.ident)))
+tmp=PBMC@meta.data
+a=read.table('/home/wzh/Desktop/scRNA_10X-master/celltype-patient1-PBMC.txt')
+labers=a[match(as.numeric(as.character(PBMC@active.ident)),a[,1]),2]
+PBMC <- AddMetaData(object = PBMC, 
+                    metadata = labers, 
+                    col.name = 'labers')
+tmp=PBMC@meta.data
+#需要修改颜色的顺序
+table(labers)
+head(labers)
+labers=as.factor(labers)
+colP=colP[match(levels(labers),a[,2])]
+head(labers)
+PBMC@meta.data$labers=labers 
+TSNEPlot(PBMC, group.by = 'labers',
+         cols =  colP,
+         label = T,label.size=4,pt.size=1.5)
+
+#差异分析
+#按照时间点进行拆分绘图
+TimePoints = PBMC@meta.data$TimePoints
+table(TimePoints)
+PBMC_ARD614 = SubsetData(PBMC,TimePoints =='PBMC_ARD614')
+TSNEPlot(PBMC_ARD614, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_EarlyD27    = SubsetData(PBMC,TimePoints =='PBMC_EarlyD27')
+TSNEPlot(PBMC_EarlyD27, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_Pre  = SubsetData(PBMC,TimePoints =='PBMC_Pre')
+TSNEPlot(PBMC_Pre, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+PBMC_RespD376 = SubsetData(PBMC,TimePoints =='PBMC_RespD376')
+TSNEPlot(PBMC_RespD376, 
+         colors.use = c('green4', 'pink', '#FF7F00', 'orchid', '#99c9fb', 'dodgerblue2', 'grey30', 'yellow', 'grey60', 'grey', 'red', '#FB9A99', 'black'),
+         do.label = T)
+#找到进行差异分析的细胞群
+PBMC_RespD376@active.ident
+PBMC_RespD376_for_DEG = SubsetData(PBMC_RespD376,
+                                   PBMC_RespD376@active.ident %in% c(4,10))
+count_matrix=PBMC_RespD376_for_DEG@assay$RNA@data
+cluster=PBMC_RespD376_for_DEG@active.ident
+save(count_matrix,cluster,
+     file = 'PBMC_RespD376_for_DEG.Rdata')
+#使用monocle做差异分析
+rm(list = ls())
+options(warn=-1)
+suppressMessages(library(Seurat))
+load(file = '/home/wzh/Desktop/scRNA_10X-master/PBMC_RespD376_for_DEG.Rdata')
+count_matrix[1:4,1:4]
+dim(count_matrix)
+table(cluster)
+#构建 monocle 对象
+library(monocle) 
+expr_matrix <- as.matrix(count_matrix)
+sample_sheet <- data.frame(cells=names(count_matrix),  
+                           cellType=cluster)
+rownames(sample_sheet)<- names(count_matrix)
+gene_annotation <- as.data.frame(rownames(count_matrix))
+rownames(gene_annotation)<- rownames(count_matrix)
+colnames(gene_annotation)<- "genes"
+pd <- new("AnnotatedDataFrame", data = sample_sheet)
+fd <- new("AnnotatedDataFrame", data = gene_annotation)
+#构建稀疏矩阵
+HSMM <- newCellDataSet(
+  as(expr_matrix, "sparseMatrix"),
+  phenoData = pd,
+  featureData = fd,
+  lowerDetectionLimit=0.5,
+  expressionFamily=negbinomial.size()
+)
+#Normalization
+HSMM <- detectGenes(HSMM, min_expr = 1)
+HSMM <- HSMM[fData(HSMM)$num_cells_expressed > 1, ]
+HSMM
+HSMM <- estimateSizeFactors(HSMM)
+HSMM <- estimateDispersions(HSMM)
+HSMM
+cds=HSMM
+# 单细胞转录组最重要的就是把细胞分群啦，这里可供选择的算法非常多，我们首先演示PCA结果。
+# 并不是所有的基因都有作用，所以先进行挑选，合适的基因用来进行聚类。
+disp_table <- dispersionTable(cds)
+unsup_clustering_genes <- subset(disp_table, mean_expression >= 0.1)
+cds <- setOrderingFilter(cds, unsup_clustering_genes$gene_id)
+plot_ordering_genes(cds)
+# plot_pc_variance_explained(cds, return_all = F) # norm_method='log'
+# 其中 num_dim 参数选择基于上面的PCA图
+cds <- reduceDimension(cds, max_components = 2, num_dim = 6,
+                       reduction_method = 'tSNE', verbose = T)
+cds <- clusterCells(cds, num_clusters = 5) 
+plot_cell_clusters(cds, 1, 2, color = "cellType")
+table(pData(cds)$Cluster,cluster)
+plot_cell_clusters(cds, 1, 2 )
+#找差异基因
+diff_test_res <- differentialGeneTest(cds,
+                                      fullModelFormulaStr = "~cellType")
+# Select genes that are significant at an FDR < 10%
+sig_genes <- subset(diff_test_res, qval < 0.1)
+dim(sig_genes)
+sig_genes$gene_short_name = rownames(sig_genes)
+head(sig_genes[,c("gene_short_name", "pval", "qval")] )
+#根据实际情况挑选感兴趣的基因
+htmapGenes=c(
+  'GAPDH','CD52','TRAC','IL32','ACTB','ACTG1','COTL1',
+  'GZMA','GZMB','GZMH','GNLY'
+)
+htmapGenes %in% rownames(sig_genes)
+#热图绘图
+library(pheatmap)
+dat=count_matrix[htmapGenes,]
+pheatmap(dat)
+n=t(scale(t(dat)))
+n[n>2]=2 #限定上限，使表达量大于2的等于2
+n[n< -2]= -2 #限定下限，使表达量小于-2的等于-2
+n[1:4,1:4]
+pheatmap(n,show_colnames =F,show_rownames = F)
+ac=data.frame(group=cluster)
+rownames(ac)=colnames(n)
+pheatmap(n,annotation_col = ac,
+         show_colnames =F,show_rownames = T)
+n[n< -1]= -1 #限定下限，使表达量小于-2的等于-2
+n[1:4,1:4] 
+pheatmap(n,annotation_col = ac,
+         show_colnames =F,show_rownames = T)
+#FeaturePlot绘图
+rm(list = ls())
+options(warn=-1)
+suppressMessages(library(Seurat))
+# 首先加载前面使用Seurat包进行细胞分群的结果
+load('')
+TSNEPlot(tumor, group.by = 'cellTypes', colors.use = c('#EF8A62', '#67A9CF'))
+count_matrix=tumor@assay$RNA@data
+count_matrix[1:4,1:4]
+cluster=tumor@meta.data$cellTypes
+table(cluster)
+allGenes = row.names(tumor@assay$RNA@raw.data)
+allGenes[grep('HLA',allGenes)]
+FeaturePlot(object = tumor, 
+            features ='HLA-A', 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+table(count_matrix['HLA-A',]>0, cluster)
+#可以看到 HLA-A 在免疫治疗前后并没有显著差异
+FeaturePlot(object = tumor, 
+            features ='HLA-B', 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+table(count_matrix['HLA-B',]>0, cluster)
+#可以看到 HLA-B在免疫治疗前后差异很大。
+
+
+```
+

@@ -1,0 +1,78 @@
+---
+title: "绘制聚类总图并根据markergene标记类群名称"
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+options(warn=-1) 
+suppressMessages(library(Seurat))
+load('/home/wzh/Desktop/scRNA_10X-master/seurat-v3/patient1.PBMC.output.Rdata')
+colP<-c('green4', 
+        'pink', 
+        '#FF7F00', 
+        'orchid', 
+        '#99c9fb', 
+        'dodgerblue2', 
+        'grey30', 
+        'yellow', 
+        'grey60', 
+        'grey', 
+        'red', 
+        '#FB9A99', 
+        'black',
+        'blue'
+)
+
+TSNEPlot(PBMC,
+         cols=colP,
+         label = T,label.size=9,pt.size=1.5)
+ggsave(filename = 'TSNEPlot_patient1_PBMC.pdf')
+#四个时期的TSNE图
+TSNEPlot(PBMC,group.by="TimePoints",pt.size=1.5)
+## 然后根据文章，可视化那些marker基因
+allGenes = row.names(PBMC@assays$RNA@data)
+markerGenes <- c(
+  "CD3D",
+  "CD3E",
+  "TRAC",
+  "IL7R",
+  "GZMA",
+  "FCGR3A",
+  "CD14",
+  "MS4A1",
+  "FCER1A" 
+)
+markerGenes %in% allGenes
+# Visualize canonical marker genes as violin plots.
+pdf('patient1_pBMC_marker_VlnPlot.pdf', width=10, height=15)
+VlnPlot(object = PBMC, features = markerGenes) 
+dev.off()
+# Visualize canonical marker genes on the sctransform embedding.
+pdf('patient1_pBMC_marker_FeaturePlot.pdf', width=10, height=15)
+FeaturePlot(object = PBMC, 
+            features =markerGenes, 
+            cols = c("grey", "blue"), 
+            reduction = "tsne")
+dev.off()
+##根据marker gene对细胞进行命名
+head(as.numeric(as.character(PBMC@active.ident)))
+tmp=PBMC@meta.data
+a=read.table('/home/wzh/Desktop/scRNA_10X-master/celltype-patient1-PBMC.txt')
+labers=a[match(as.numeric(as.character(PBMC@active.ident)),a[,1]),2]
+PBMC <- AddMetaData(object = PBMC, 
+                    metadata = labers, 
+                    col.name = 'labers')
+tmp=PBMC@meta.data
+#需要修改颜色的顺序
+table(labers)
+head(labers)
+labers=as.factor(labers)
+colP=colP[match(levels(labers),a[,2])]
+head(labers)
+PBMC@meta.data$labers=labers 
+TSNEPlot(PBMC, group.by = 'labers',
+         cols =  colP,
+         label = T,label.size=4,pt.size=1.5)
+```
+
