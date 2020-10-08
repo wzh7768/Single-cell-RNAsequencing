@@ -1,0 +1,14 @@
+---
+title: "10X数据下载"
+output: html_document
+---
+#基于Linux环境运行
+#根据数据链接的特点生成每一个数据下载链接的ftp，如
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21653/suppl/GSE21653_RAW.tar
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE19nnn/GSE19615/suppl/GSE19615_RAW.tar
+ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE6nnn/GSE6532/suppl/GSE6532_RAW.tar
+```{r}
+axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE117nnn/GSE117988/suppl/GSE117988_raw.expMatrix_PBMC.csv.gz
+axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE117nnn/GSE117988/suppl/GSE117988_raw.expMatrix_PBMC.csv.gz
+```
+

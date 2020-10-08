@@ -1,0 +1,64 @@
+---
+title: "矩阵数据预处理降维聚类"
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+options(warn=-1) 
+suppressMessages(library(Seurat))
+raw_dataPBMC <- read.csv('/home/wzh/Desktop/GSE117988_raw.expMatrix_PBMC.csv.gz', header = TRUE, row.names = 1)
+#按照列，对每一个细胞进行内部归一化，主要是统一文库大小
+dataPBMC <- log2(1 + sweep(raw_dataPBMC, 2, median(colSums(raw_dataPBMC))/colSums(raw_dataPBMC), '*'))
+#对合并矩阵的分组信息进行拆分
+timePoints <- sapply(colnames(dataPBMC), function(x) unlist(strsplit(x, "\\."))[2]) 
+timePoints <-ifelse(timePoints == '1', 'PBMC_Pre', 
+                    ifelse(timePoints == '2', 'PBMC_EarlyD27',
+                           ifelse(timePoints == '3', 'PBMC_RespD376', 'PBMC_ARD614')))
+#表达矩阵的质量控制
+#简单看看表达矩阵的性质，主要是基因数量，细胞数量;以及每个细胞表达基因的数量，和每个基因在多少个细胞里面表达
+#(fivenum():返回五个数据：最小值、下四分位数、中位数、上四分位数、最大值)
+fivenum(apply(dataPBMC,1,function(x) sum(x>0) ))
+#boxplot(apply(dataPBMC,1,function(x) sum(x>0) ))
+fivenum(apply(dataPBMC,2,function(x) sum(x>0) ))
+#hist(apply(dataPBMC,2,function(x) sum(x>0) ))
+
+#创建Seurat的对象
+PBMC <- CreateSeuratObject(dataPBMC, 
+                           min.cells = 1, min.features = 0, 
+                           project = '10x_PBMC')
+# Add meta.data (nUMI and timePoints)
+PBMC <- AddMetaData(object = PBMC, 
+                    metadata = apply(raw_dataPBMC, 2, sum),
+                    col.name = 'nUMI_raw')
+PBMC <- AddMetaData(object = PBMC, metadata = timePoints, col.name = 'TimePoints')
+#nFeature_RNA nUMI_raw绘图
+sce=PBMC
+features=c("nFeature_RNA", "nUMI_raw")
+VlnPlot(object = sce, 
+        features = features, 
+        group.by = 'TimePoints', ncol = 2)
+#相关性
+FeatureScatter(sce,feature1 = "nUMI_raw",feature2 = "nFeature_RNA")
+#高表达量基因
+tail(sort(Matrix::rowSums(GetAssayData(sce,assay = "RNA"))))
+#标准聚类可视化
+#Cluster PBMC
+PBMC <- ScaleData(object = PBMC, vars.to.regress = c('nUMI_raw'), model.use = 'linear', use.umi = FALSE)
+#Find VariableFeatures
+PBMC <- FindVariableFeatures(object = PBMC, mean.function = ExpMean, dispersion.function = LogVMR, mean.cutoff = c(0.0125,3), dispersion.cutoff = c(0.5,Inf))
+#PCA降维
+PBMC <- RunPCA(object = PBMC, pc.genes = VariableFeatures(PBMC))
+#t-SNE聚类
+PBMC <- FindNeighbors(PBMC, reduction = "pca", dims = 1:10,
+                      k.param = 35)
+PBMC <- FindClusters(object = PBMC, 
+                     resolution = 1, verbose=F) 
+
+PBMC <- RunTSNE(object = PBMC, dims.use = 1:10)
+
+DimPlot(PBMC)
+#储存Ｒ数据
+save(PBMC,file = 'patient1.PBMC.output.Rdata')
+```
+
