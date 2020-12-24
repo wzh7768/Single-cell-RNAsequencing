@@ -1,0 +1,552 @@
+---
+title: "GEO10X Rawdata下载及分析"
+output: html_document
+---
+
+#数据下载与读取
+```{r}
+#基于Linux环境运行
+axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132608/suppl/GSE132608_RAW.tar
+#读取数据(单个)
+tar -xvf GSE132608_RAW.tar
+#解压得到GSM3880020_barcodes.tsv.gz;GSM3880020_features.tsv.gz;GSM3880020_matrix.mtx.gz三个文件
+mkdir s_1
+mv GSM388* s_1
+#消除文件前缀
+find s_1/ -name "*gz" | while read n ;do mv $n s_1/${n##*_};done
+cd s_1
+#gunzip *.gz
+#解压得到GSM3880020_barcodes.tsv;GSM3880020_features.tsv;GSM3880020_matrix.mtx三个文件
+s_1#该文件可在R语言中构建data_dir
+
+#读取数据(多个)
+axel -n 10 ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE106nnn/GSE106273/suppl/GSE106273_RAW.tar
+tar -xvf GSE106273_RAW.tar
+#解压得到GSM283开头的24个文件
+mkdir tmp
+mv GSM283* tmp
+cd tmp
+#创建文件夹
+for i in $(seq 498 505);do mkdir s_${i};done
+#将成组的文件移动到相应文件夹内
+for i in $(seq 498 505);do mv GSM2834${i}_*gz s_${i};done
+#嵌套循环消除文件前缀
+for i in $(seq 498 505);do find s_${i}/ -name "*gz" | while read n ;do mv $n s_${i}/${n##*_};done ;done
+#批量解压缩
+for i in $(seq 498 505);do gunzip s_${i}/*  ;done
+
+##基于R语言运行
+rm(list = ls()) # clear the environment
+library(Seurat)
+data_dir <- '/home/wzh/Desktop/s_1'
+list.files(data_dir)
+expression_matrix <- Read10X(data.dir = data_dir)
+sce1 = CreateSeuratObject(counts = expression_matrix,min.cells = 1,min.features = 200)
+```
+
+##数据分析－降维聚类
+```{r}
+#表达矩阵预处理及PCA降维
+sce1 <- NormalizeData(sce1)
+sce1 <- ScaleData(sce1, display.progress = F)
+sce1 <- FindVariableFeatures(object = sce1, mean.function = ExpMean, dispersion.function = LogVMR, mean.cutoff = c(0.0125,3), dispersion.cutoff = c(0.5,Inf))
+sce1 <- RunPCA(object = sce1, pc.genes = VariableFeatures(sce1))
+sce1 <- FindNeighbors(sce1, dims = 1:10)
+sce1 <- FindClusters(sce1, resolution = 0.3)
+#UMAP聚类
+colP<-c('green4', 
+        'pink', 
+        '#FF7F00', 
+        'orchid', 
+        '#99c9fb', 
+        'dodgerblue2', 
+        'grey30', 
+        'yellow', 
+        'grey60', 
+        'grey', 
+        'red', 
+        '#FB9A99', 
+        'black',
+        '#A73266',
+        '#7b0099',
+        '#C45544'
+)
+sce1 <- RunUMAP(object = sce1, dims=1:10)
+DimPlot(sce1,cols=colP,reduction = "umap",label = T,label.size=5,pt.size=0.6)
+#t-SNE聚类
+#sce2 <- RunTSNE(object = sce1, dims=1:10)
+#DimPlot(sce2,reduction="tsne")
+
+##根据marker gene对细胞进行命名
+head(as.numeric(as.character(sce1@active.ident)))
+tmp=sce1@meta.data
+a=read.table('/home/wzh/Desktop/SCN.txt')
+labers=a[match(as.numeric(as.character(sce1@active.ident)),a[,1]),2]
+sce1 <- AddMetaData(object = sce1, 
+                    metadata = labers, 
+                    col.name = 'labers')
+tmp=sce1@meta.data
+#需要修改颜色的顺序
+table(labers)
+head(labers)
+labers=as.factor(labers)
+colP=colP[match(levels(labers),a[,2])]
+head(labers)
+sce1@meta.data$labers=labers 
+DimPlot(sce1, group.by = 'labers',
+         cols =  colP,
+         label = T,label.size=3,pt.size=0.6,reduction = "umap")
+
+```
+
+##Featureplot绘图
+```{r}
+#手动找每个cluster的marker gene
+cluster7.markers <- FindMarkers(sce1, ident.1 = 7, min.pct = 0.25)
+head(cluster7.markers, n = 5)
+print(x = head(cluster7.markers))
+markers_genes =  rownames(head(x = cluster7.markers, n = 5))
+#选取两个感兴趣的cluster进行比较
+cluster3_7.markers <- FindMarkers(sce1, ident.1 = 3, indent.2=7,min.pct = 0.25)
+head(cluster3_7.markers, n = 5)
+print(x = head(cluster7.markers))
+markers_genes =  rownames(head(x = cluster3_7.markers, n = 5))
+#显示cluster0差异基因在所有细胞中的表达情况
+FeaturePlot(object = sce1, 
+            features =markers_genes, 
+            cols= c("grey", "blue"), 
+            reduction = "umap")
+```
+
+##cluster热图
+```{r}
+#加载包
+library(pheatmap)
+library(viridisLite)
+library(ggpubr)
+library(grid)
+#循环找每个cluster的marker gene
+library(dplyr)
+sce.markers <- FindAllMarkers(sce1, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top1 <- sce.markers %>% group_by(cluster) %>% top_n(n = 1, wt = avg_logFC)
+top5 <- sce.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_logFC)
+#绘图函数
+plot_heatmap_2 <- function(matrix=matrix, clusters=clusters, rowbreaks, colbreaks, cluster_color){
+  annotation_col <- data.frame(
+    Cell_Clusters=clusters
+  )
+  
+  annotation_colors <- list(
+    Cell_Clusters=cluster_color
+  )
+  
+  # Color palette for the heatmap
+  cold <- colorRampPalette(c('#41b6c4','#253494','#081d58', '#081d58', '#081d58', '#081d58', '#081d58', '#081d58', '#081d58'))
+  warm <- colorRampPalette(c('#fecc5c','#e31a1c','#800026','#800026','#800026','#800026','#800026','#800026'))
+  mypalette <- c(rev(cold(20)), warm(20))
+  # mypalette <- c(rev(cold(15)), warm(16))
+  breaksList = seq(0, 5, by = 0.5)
+  
+  
+  pheatmap(
+    matrix, 
+    # scale="row",
+    show_colnames=FALSE, 
+    # show_rownames=FALSE, 
+    cluster_cols=FALSE,
+    # cluster_rows=FALSE,
+    clustering_method="ward.D",
+    annotation_col=annotation_col,
+    annotation_colors=annotation_colors,
+    color=viridis(10),
+    # color=mypalette,
+    # gaps_row=rowbreaks,
+    gaps_col=colbreaks,
+    border_color = FALSE
+    # breaks=breaksList
+  )
+}
+#表达矩阵重新整理
+clus=sce1@active.ident
+gene_subset <- as.matrix(log(dat[rownames(dat) %in% top5$gene,]+1))
+gene_subset[1:4,1:4]
+cl0_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="0"])]
+cl1_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="1"])]
+cl2_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="2"])]
+cl3_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="3"])]
+cl4_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="4"])]
+cl5_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="5"])]
+cl6_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="6"])]
+cl7_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="7"])]
+cl8_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="8"])]
+cl9_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="9"])]
+cl10_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="10"])]
+cl11_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="11"])]
+cl12_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="12"])]
+cl13_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="13"])]
+cl14_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="14"])]
+cl15_gene_subset <- gene_subset[, colnames(gene_subset) %in% names(clus[clus=="15"])]
+
+heatmap_gene_subset <- cbind(
+  cl0_gene_subset,
+  cl1_gene_subset, 
+  cl2_gene_subset,
+  cl3_gene_subset,
+  cl4_gene_subset,
+  cl5_gene_subset,
+  cl6_gene_subset,
+  cl7_gene_subset,
+  cl8_gene_subset,
+  cl9_gene_subset,
+  cl10_gene_subset,
+  cl11_gene_subset,
+  cl12_gene_subset,
+  cl13_gene_subset,
+  cl14_gene_subset,
+  cl15_gene_subset
+  
+)
+heatmap_gene_subset <- heatmap_gene_subset[order(match(rownames(heatmap_gene_subset), top5$gene)),]
+rowbreaks <- c(6, 15)
+colbreaks <- c(
+  ncol(cl1_gene_subset),
+  ncol(cl1_gene_subset)+ncol(cl2_gene_subset), 
+  ncol(cl1_gene_subset)+ncol(cl2_gene_subset)+ncol(cl3_gene_subset)
+)
+cluster_color <- c(
+        '0'='green4', 
+        '1'='pink', 
+        '2'='#FF7F00', 
+        '3'='orchid',
+        '4'='#99c9fb', 
+        '5'='dodgerblue2', 
+        '6'='grey30', 
+        '7'='yellow', 
+        '8'='grey60', 
+        '9'='grey', 
+        '10'='red', 
+        '11'='#FB9A99', 
+        '12'='black',
+        '13'='#A73266',
+        '14'='#7b0099',
+        '15'='#C45544'
+  
+)
+#绘图
+plot_heatmap_2(
+  heatmap_gene_subset, 
+  clus, 
+  rowbreaks, 
+  colbreaks,
+  cluster_color
+)
+dev.off()
+#Seurat自带函数绘图
+DoHeatmap(sce1, features = top5$gene) + NoLegend()
+
+```
+
+##小提琴图
+```{r}
+dat=as.data.frame(sce1@assays$RNA@data)
+clus=sce1@active.ident
+#绘图函数1
+violin_gene_exp <- function(gene, dat, conditions=conditions, colours=colours, test=TRUE){
+  exp <- as.numeric(unlist(dat))
+  
+  gene_exp <- data.frame(
+    cell=colnames(dat),
+    clusters=conditions,
+    gene=exp
+  )
+  
+  if (test==TRUE){
+    # Perform pairwise comparisons
+    test <- compare_means(gene ~ clusters, data = gene_exp, method = "wilcox.test")
+    # print(test)
+    # print(compare_means(gene ~ clusters, data = gene_exp, , method = "wilcox.test", ref.group = ".all."))
+    
+    p <- ggboxplot(gene_exp, x = "clusters", y = "gene", color = "white")+
+      geom_violin(scale = "width", width=0.7, adjust = .5,aes(fill=clusters)) +
+      stat_summary(fun.y=mean, geom="point", shape=21, size=3,  stroke = 1, fill="white")+
+      
+      # geom_jitter(size=0.3)+  	  
+      geom_hline(yintercept = mean(gene_exp$gene), linetype = 2)+
+      
+      # geom_boxplot(fill="white", outlier.shape = NA, width = 0.2)+
+      scale_fill_manual(
+        values=colours
+      ) +	  
+      theme_bw()+
+      ggtitle(gene)+
+      expand_limits(y = c(0, max(gene_exp$gene)+1.5)) +
+      # stat_compare_means(method = "kruskal.test", label.y = max(gene_exp$gene)+1)+      # Add global p-value
+      stat_compare_means(
+        label = "p.signif", 
+        method = "wilcox.test", 
+        ref.group = ".all.", 
+        label.y = max(gene_exp$gene)+0.75, 
+        size=6
+      )+ # Pairwise comparison against all
+      theme(
+        plot.title = element_text(size=18, face="bold.italic", hjust = 0.5),
+        axis.text=element_text(size=16),
+        # axis.title=element_text(size=16),
+        axis.title=element_blank(),
+        legend.text = element_text(size =16),
+        legend.title=element_blank(),
+        aspect.ratio=0.5,
+        legend.position="none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+      )
+    
+  }else{
+    p <- ggplot(gene_exp, aes(clusters, gene))+
+      geom_violin(scale = "width", width=0.7, adjust = .5,aes(fill=clusters)) +
+      stat_summary(fun.y=mean, geom="point", shape=21, size=3,  stroke = 1, fill="white")+
+      # geom_jitter(size=0.3)+ 
+      scale_fill_manual(
+        values=colours
+      ) +	  
+      theme_bw()+
+      ggtitle(gene)+
+      theme(
+        plot.title = element_text(size=18, face="bold.italic", hjust = 0.5),
+        axis.text=element_text(size=16),
+        # axis.title=element_text(size=16),
+        axis.title=element_blank(),
+        legend.text = element_text(size =16),
+        legend.title=element_blank(),
+        aspect.ratio=0.5,
+        legend.position="none"
+        # panel.grid.major = element_blank(),
+        # panel.grid.minor = element_blank()
+      )
+  }
+  
+  
+  print(p)
+}
+
+#多次尝试可能是电脑内存不够，无法完成
+scn_clusterPalette <- c(
+        'green4', 
+        'pink', 
+        '#FF7F00', 
+        'orchid', 
+        '#99c9fb', 
+        'dodgerblue2', 
+        'grey30', 
+        'yellow', 
+        'grey60', 
+        'grey', 
+        'red', 
+        '#FB9A99', 
+        'black',
+        '#A73266',
+        '#7b0099',
+        '#C45544'
+)
+p <- list()
+for (genes in c('Agt','Hexb')) {
+  p[[genes]] <- violin_gene_exp(
+    genes, 
+    dat, 
+    clus, 
+    scn_clusterPalette
+  )
+}
+
+do.call(grid.arrange,c(p, ncol=3))
+
+#绘图函数2
+g=Idents(sce1)
+mat=GetAssayData(object = sce1, slot = "scale.data")
+mat[1:4,1:4]
+ge=as.numeric(dat['Agt',])
+ge=log(ge+1)
+boxplot(ge~g)
+df=data.frame(value=ge,
+              group=g)
+ggviolin(df, "group", "value", fill = "group",
+         # palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+         add = c("boxplot","mean_sd"), 
+         add.params = list(fill = "white"))
+
+
+#Seurat自带绘图
+VlnPlot(object = sce1, features = top1$gene, 
+        pt.size = 0,ncol = 4)
+
+
+```
+
+##DEG分析和GO绘图
+```{r}
+##Prepare for DEG
+##count_matrix给表达矩阵 sce1@assays$RNA@counts
+##clustering给metadata sce1@sctive.ident
+#加载包
+library(monocle)
+dat=as.data.frame(sce1@assays$RNA@data)
+count=as.data.frame(sce1@assays$RNA@counts)
+clus=sce1@active.ident
+#构建monocle对象函数
+prepare_for_DE <- function(count_matrix=count_matrix, clustering=clustering){
+  expr_matrix <- as.matrix(count_matrix)
+  sample_sheet <- data.frame(cells=colnames(count_matrix),  
+                             cellType=clustering)
+  rownames(sample_sheet)<- colnames(count_matrix)
+  gene_annotation <- as.data.frame(rownames(count_matrix))
+  rownames(gene_annotation)<- rownames(count_matrix)
+  colnames(gene_annotation)<- "genes"
+  pd <- new("AnnotatedDataFrame", data = sample_sheet)
+  fd <- new("AnnotatedDataFrame", data = gene_annotation)
+  HSMM <- newCellDataSet(
+      as(expr_matrix,"sparseMatrix"),
+      phenoData = pd,
+      featureData = fd,
+      lowerDetectionLimit=0.5,
+      expressionFamily=negbinomial.size()
+  )
+  HSMM <- detectGenes(HSMM, min_expr = 5)
+  HSMM <- HSMM[fData(HSMM)$num_cells_expressed > 10, ]
+  HSMM <- estimateSizeFactors(HSMM)
+  HSMM <- estimateDispersions(HSMM)
+  return(HSMM)
+}
+
+#计算差异基因函数
+findDEgenes <- function(HSMM=HSMM, qvalue=qvalue){
+  diff_test_res <- differentialGeneTest(
+    HSMM,
+    fullModelFormulaStr="~cellType"
+  )
+  
+  sig_genes_0.05 <- subset(diff_test_res, qval < 0.05)
+  sig_genes_0.01 <- subset(diff_test_res, qval < 0.01)
+  
+  print(paste(nrow(sig_genes_0.05), " significantly DE genes (FDR<0.05).", sep=""))
+  print(paste(nrow(sig_genes_0.01), " significantly DE genes (FDR<0.01).", sep=""))
+  
+  diff_test_res <- subset(diff_test_res, qval< qvalue)
+  
+  return(diff_test_res)
+}
+
+#差异基因归类函数
+get_up_reg_clusters <- function(count, clustering, DE_genes){
+  cluster_nb <- unique(clustering)
+  mean_per_cluster <- vector()
+  DE_genes <- DE_genes[order(rownames(DE_genes)),]
+  count <- count[order(rownames(count)),]
+  count_de_genes <- count[rownames(count) %in% DE_genes$genes,]
+  print(dim(count_de_genes))
+  for (clusters in cluster_nb) {
+    # print(head(count_de_genes[,
+    # 		colnames(count_de_genes) %in% names(clustering[clustering==clusters])
+    # 	]))
+    mean <- rowMeans(
+      as.matrix(count_de_genes[,
+                               colnames(count_de_genes) %in% names(clustering[clustering==clusters])
+                               ])
+    )
+    names(mean) <- clusters
+    mean_per_cluster <- cbind(
+      mean_per_cluster,
+      mean
+    )
+  }
+  colnames(mean_per_cluster) <- cluster_nb
+  up_reg_cluster <- colnames(mean_per_cluster)[apply(mean_per_cluster,1,which.max)]
+  de_genes_table <- data.frame(
+    DE_genes,
+    mean_per_cluster,
+    cluster=up_reg_cluster
+  )
+  
+  return(de_genes_table)
+}
+
+# Prepare data to be loaded in Monocle
+#使用count值
+DE_scn <- prepare_for_DE (
+  count, 
+  clus
+)
+
+# Compute DE genes
+scn_DE_genes <- findDEgenes(
+    DE_scn, 
+    qvalue=0.05
+  )
+
+# DE genes cluster
+#使用data值
+de_clusters <- get_up_reg_clusters(
+  dat, 
+  clus, 
+  scn_DE_genes
+)
+
+#GO绘图
+#加载软件包
+library(data.table)
+library(ROTS)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+# Extract DE gene names
+de_genes <- de_clusters
+gene_names <- subset(de_genes, qval<0.05)
+gene_names <- gene_names$genes
+
+# Convert gene ID into entrez genes
+entrez_genes <- bitr(gene_names, fromType="SYMBOL", 
+                     toType="ENTREZID", 
+                     OrgDb="org.Mm.eg.db")
+entrez_genes <- entrez_genes[!entrez_genes$ENTREZID %in% "101055843",]
+
+de_gene_clusters <- de_genes[de_genes$genes %in% entrez_genes$SYMBOL,
+                             c("genes", "cluster")]
+de_gene_clusters <- data.frame(
+  ENTREZID=entrez_genes$ENTREZID[entrez_genes$SYMBOL %in% de_gene_clusters$genes],
+  cluster=de_gene_clusters$cluster
+)
+table(de_gene_clusters$cluster)
+list_de_gene_clusters <- split(de_gene_clusters$ENTREZID, 
+                               de_gene_clusters$cluster)
+
+
+# Run full GO enrichment test
+formula_res <- compareCluster(
+  ENTREZID~cluster, 
+  data=de_gene_clusters, 
+  fun="enrichGO", 
+  OrgDb="org.Mm.eg.db",
+  ont		   = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.01,
+  qvalueCutoff  = 0.05
+)
+
+# Run GO enrichment test and merge terms 
+# that are close to each other to remove result redundancy
+lineage1_ego <- simplify(
+  formula_res, 
+  cutoff=0.5, 
+  by="p.adjust", 
+  select_fun=min
+)
+
+# Plot both analysis results
+pdf('female_compared_GO_term_DE_cluster.pdf',width = 11,height = 6)
+dotplot(formula_res, showCategory=5)
+dev.off()
+pdf('female_compared_GO_term_DE_cluster_simplified.pdf',width = 11,height = 6)
+dotplot(lineage1_ego, showCategory=5)
+dev.off()
+
+```
+
+
